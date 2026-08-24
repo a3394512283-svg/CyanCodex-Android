@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 默认禁止明文; 仅放行内置 CDN 域名(https 为主, 明文作兜底) -->
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">cdn.example.com</domain>
+    </domain-config>
+</network-security-config>
