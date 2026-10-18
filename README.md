@@ -4,6 +4,21 @@
 > 二改范围、构建方式、签名说明见 [FORK-NOTICE.md](FORK-NOTICE.md)。
 > **非官方发布**，不代表沧蓝工坊官方立场或背书。
 
+## 相关仓库
+
+| 仓库 | 定位 |
+| --- | --- |
+| **[CyanCodex-Android](https://github.com/a3394512283-svg/CyanCodex-Android)** | 本仓库 · 安卓版二改（上游 fork） |
+| [cyancodex-desktop](https://github.com/a3394512283-svg/cyancodex-desktop) | Windows 桌面端（独立实现，非 fork） |
+| [Diamond-Minec/CyanCodex-Android](https://github.com/Diamond-Minec/CyanCodex-Android) | 上游原项目（GPL-3.0） |
+
+## 分支
+
+| 分支 | 用途 |
+| --- | --- |
+| `main` | 稳定版，对应已发布的 APK |
+| `dev` | 开发分支，稳定后合回 `main` |
+
 
 本目录收录 CyanCodex 的**用户端（安卓客户端 / 网页端）源码**与**指令生成器算法**。
 **不含服务端后端代码**（数据库、接口路由、鉴权、验证码、邮件短信、AI 代理），
