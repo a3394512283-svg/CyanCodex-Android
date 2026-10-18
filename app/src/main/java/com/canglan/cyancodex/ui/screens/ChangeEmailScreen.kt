@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -72,7 +73,7 @@ fun ChangeEmailScreen(nav: NavHostController) {
                 OutlinedTextField(value = code, onValueChange = { code = it },
                     label = { Text("邮箱验证码") }, singleLine = true, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { sendCode() }, enabled = countdown == 0 && !busy) {
+                GlassActionButton(onClick = { sendCode() }, enabled = countdown == 0 && !busy) {
                     Text(if (countdown > 0) "${countdown}s" else "发送验证码")
                 }
             }
@@ -80,7 +81,7 @@ fun ChangeEmailScreen(nav: NavHostController) {
                 Text(msg, color = if (msg.startsWith("验证码已发送")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            GlassActionButton(filled = true, onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (busy) "提交中…" else "确认修改")
             }
         }

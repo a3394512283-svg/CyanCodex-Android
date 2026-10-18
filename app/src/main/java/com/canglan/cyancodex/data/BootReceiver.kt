@@ -14,5 +14,7 @@ class BootReceiver : BroadcastReceiver() {
         val app = ctx.applicationContext
         AnnouncementNotifier.ensureChannel(app)
         AnnouncementNotifier.schedule(app)
+        // 开机后恢复后台常驻收消息 (BOOT_COMPLETED 是允许启动前台服务的豁免场景)
+        MessageWatchService.start(app)
     }
 }

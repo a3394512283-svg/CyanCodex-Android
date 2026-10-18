@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.LoadingBox
 import com.canglan.cyancodex.ui.components.safeApi
 
@@ -65,7 +66,7 @@ fun TutorialScreen(nav: NavHostController, id: Long) {
                             }
                             Text(videoUrl.ifBlank { "（未提供链接）" }, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Button(onClick = {
+                            GlassActionButton(filled = true, onClick = {
                                 if (videoUrl.isNotBlank()) {
                                     runCatching {
                                         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(videoUrl)))

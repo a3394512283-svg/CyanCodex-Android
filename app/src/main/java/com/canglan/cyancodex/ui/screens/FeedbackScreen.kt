@@ -28,6 +28,8 @@ import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,9 +94,9 @@ fun FeedbackScreen(nav: NavHostController) {
 
             // 分类选择
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = category == "feedback", onClick = { category = "feedback"; error = "" },
+                GlassFilterChip(selected = category == "feedback", onClick = { category = "feedback"; error = "" },
                     label = { Text("意见") })
-                FilterChip(selected = category == "appeal", onClick = { category = "appeal"; error = "" },
+                GlassFilterChip(selected = category == "appeal", onClick = { category = "appeal"; error = "" },
                     label = { Text("申诉") })
             }
 
@@ -129,7 +131,7 @@ fun FeedbackScreen(nav: NavHostController) {
                     }
                 }
             } else {
-                OutlinedButton(
+                GlassActionButton(
                     onClick = { imgPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -143,10 +145,10 @@ fun FeedbackScreen(nav: NavHostController) {
                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
 
-            Button(
+            GlassActionButton(filled = true,
                 onClick = {
                     val c = content.trim()
-                    if (c.length < 5) { error = "内容至少 5 个字"; return@Button }
+                    if (c.length < 5) { error = "内容至少 5 个字"; return@GlassActionButton }
                     scope.launch {
                         busy = true
                         error = ""

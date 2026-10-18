@@ -9,11 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.plugin.PluginManager
 import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
 
 /**
  * 开发平台: 插件开发文档 (如何编写/打包/安装插件)
@@ -33,6 +35,19 @@ fun PluginDevScreen(nav: NavHostController) {
             Text("插件是独立打包的 Java 代码(JAR), 可以在不更新 App 的情况下扩展功能。\n" +
                 "App 内置 2 个默认插件(自定义背景 / 开发者示例), 也支持你写的插件。",
                 style = MaterialTheme.typography.bodyMedium)
+
+            // 图形化制作插件: 插件工坊
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("不会写代码？用「插件工坊」", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                    Text("图形化(积木式)拼出插件行为, 点一下就能打包成可加载的 JAR, 全程离线, 不需要编译器。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Spacer(Modifier.height(8.dp))
+                    GlassActionButton(filled = true, onClick = { nav.navigate(Routes.PLUGIN_BUILDER) }) { Text("打开插件工坊") }
+                }
+            }
 
             Text("插件目录", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Text(PluginManager.pluginDir(ctx).absolutePath, style = MaterialTheme.typography.bodySmall,

@@ -31,6 +31,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
+import com.canglan.cyancodex.ui.components.TopBarTextAction
 import com.canglan.cyancodex.ui.components.copyToClipboard
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -89,10 +92,11 @@ private fun buildRawtext(elems: List<TlElem>): String {
 fun TitlerawJsonScreen(nav: NavHostController) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     // mutableStateListOf: 增删可被 Compose 观察, 避免预设替换后点删除索引失效闪退 (意见 id=13)
-    val elems = remember { mutableStateListOf(TlElem(type = "text", text = "欢迎来到 沧蓝工坊")) }
+    // 初始为空文字元素 (意见 #54: 不再硬编码示例文字, 避免"初始文字删不掉")
+    val elems = remember { mutableStateListOf(TlElem(type = "text", text = "")) }
     var expandedId by remember { mutableStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
-    var outputJson by remember { mutableStateOf(buildRawtext(listOf(TlElem(type = "text", text = "欢迎来到 沧蓝工坊")))) }
+    var outputJson by remember { mutableStateOf(buildRawtext(listOf(TlElem(type = "text", text = "")))) }
     var pos by remember { mutableStateOf("title") }
     var target by remember { mutableStateOf("@a") }
     var msg by remember { mutableStateOf("") }
@@ -210,20 +214,20 @@ fun TitlerawJsonScreen(nav: NavHostController) {
     Scaffold(topBar = {
         AppTopBar(title = "T显 JSON 编辑器", icon = Icons.Default.Code, onBack = { nav.popBackStack() },
             actions = {
-                TextButton(onClick = { copyToClipboard(ctx, outputJson, "已复制 rawtext JSON") }) { Text("复制JSON") }
-                TextButton(onClick = { copyToClipboard(ctx, fullCmd, "已复制完整指令") }) { Text("复制指令") }
+                TopBarTextAction(onClick = { copyToClipboard(ctx, outputJson, "已复制 rawtext JSON") }) { Text("复制JSON") }
+                TopBarTextAction(onClick = { copyToClipboard(ctx, fullCmd, "已复制完整指令") }) { Text("复制指令") }
             })
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             // 顶部工具行
             Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { showAdd = true }, modifier = Modifier.weight(1f)) {
+                GlassActionButton(onClick = { showAdd = true }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("添加元素")
                 }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { applyPreset("欢迎语") }) { Text("欢迎语", style = MaterialTheme.typography.labelMedium) }
+                GlassActionButton(onClick = { applyPreset("欢迎语") }) { Text("欢迎语", style = MaterialTheme.typography.labelMedium) }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { applyPreset("计分板") }) { Text("计分板", style = MaterialTheme.typography.labelMedium) }
+                GlassActionButton(onClick = { applyPreset("计分板") }) { Text("计分板", style = MaterialTheme.typography.labelMedium) }
             }
             // 元素列表
             LazyColumn(Modifier.weight(1f)) {
@@ -244,7 +248,7 @@ fun TitlerawJsonScreen(nav: NavHostController) {
                     Text("位置:", style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.width(6.dp))
                     listOf("title" to "title", "subtitle" to "subtitle", "actionbar" to "actionbar").forEach { (k, v) ->
-                        FilterChip(selected = pos == k, onClick = { pos = k }, label = { Text(v, style = MaterialTheme.typography.labelSmall) },
+                        GlassFilterChip(selected = pos == k, onClick = { pos = k }, label = { Text(v, style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier.padding(end = 4.dp))
                     }
                     Spacer(Modifier.width(4.dp))

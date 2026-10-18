@@ -21,6 +21,7 @@ import java.util.zip.ZipFile
 object PluginManager {
     private const val TAG = "CyanPlugin"
     private const val SERVICES_FILE = "META-INF/services/com.canglan.cyancodex.plugin.CyanPlugin"
+    private const val SPEC_FILE = "cyancodex-plugin.json"   // 插件工坊生成的行为规格
     private const val ASSET_DIR = "plugins"
 
     data class LoadedPlugin(val plugin: CyanPlugin, val jarFile: File, val enabled: Boolean)
@@ -72,13 +73,17 @@ object PluginManager {
         return try {
             // Android 14+ 禁止从"可写"路径加载 dex: 先把 jar 置为只读
             runCatching { jar.setReadOnly() }
-            // 读取 services 声明, 拿到实现类名
+            // 读取 services 声明, 拿到实现类名; 同时读取积木插件的行为规格
             val implNames = mutableListOf<String>()
+            var specJson: String? = null
             ZipFile(jar).use { zip ->
                 zip.getEntry(SERVICES_FILE)?.let { entry ->
                     zip.getInputStream(entry).bufferedReader().useLines { lines ->
                         lines.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { implNames.add(it) }
                     }
+                }
+                zip.getEntry(SPEC_FILE)?.let { entry ->
+                    specJson = zip.getInputStream(entry).bufferedReader().use { it.readText() }
                 }
             }
             if (implNames.isEmpty()) {
@@ -91,6 +96,11 @@ object PluginManager {
                 try {
                     val clazz = Class.forName(name, true, loader)
                     val impl = clazz.getDeclaredConstructor().newInstance() as CyanPlugin
+                    // 积木插件: 先注入行为规格 (插件的 id/名称/动作都在规格里), 再判断启用状态
+                    if (impl is SpecPlugin && specJson != null) {
+                        runCatching { impl.attachSpec(specJson!!) }
+                            .onFailure { Log.w(TAG, "attachSpec failed for ${jar.name}", it) }
+                    }
                     val enabled = Session.pluginEnabled(impl.id)
                     if (enabled) runCatching { impl.onEnable(context.applicationContext) }
                     LoadedPlugin(impl, jar, enabled)
@@ -122,6 +132,29 @@ object PluginManager {
         plugins.forEach { if (it.enabled) runCatching { it.plugin.onDisable() } }
         init(context)
     }
+
+    /**
+     * 安装插件 JAR: 写入开发者插件目录 (外部 files/plugins) 并重新加载
+     * 供「插件工坊」打包后直接安装使用
+     */
+    fun install(context: Context, fileName: String, bytes: ByteArray): File? {
+        return try {
+            val safe = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").take(64)
+            val target = File(pluginDir(context), if (safe.endsWith(".jar")) safe else "$safe.jar")
+            target.writeBytes(bytes)
+            reload(context)
+            Log.i(TAG, "installed plugin: ${target.name} (${bytes.size}B)")
+            target
+        } catch (e: Exception) {
+            Log.e(TAG, "install failed", e)
+            null
+        }
+    }
+
+    /** 已安装插件 JAR 文件列表 */
+    fun installedFiles(context: Context): List<File> =
+        pluginDir(context).listFiles { f -> f.isFile && f.extension.equals("jar", true) }
+            ?.sortedBy { it.name } ?: emptyList()
 
     /** 当前启用的背景插件提供的背景 (无则 null) */
     fun background(): PluginBackground? = try {

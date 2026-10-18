@@ -23,23 +23,39 @@ import kotlinx.coroutines.launch
  * ③ 开机后由 BootReceiver 重新排程。
  */
 object AnnouncementNotifier {
-    const val CHANNEL_ID = "announcements"
-    const val MSG_CHANNEL_ID = "messages"
+    // v1.0.91: 通知改为静默 (只在通知栏显示, 不弹横幅/不响铃/不震动)。
+    // 安卓 8+ 渠道重要级别创建后不可修改, 所以换新渠道 id, 并删掉旧的 HIGH 渠道,
+    // 否则老用户的通知还是会走旧渠道继续弹横幅。
+    const val CHANNEL_ID = "announcements_v2"
+    const val MSG_CHANNEL_ID = "messages_v2"
+    private val LEGACY_CHANNELS = listOf("announcements", "messages")
     private const val CHECK_INTERVAL_MS = 15 * 60 * 1000L // 每 15 分钟检查一轮
 
     fun ensureChannel(ctx: Context) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "公告通知", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "新公告 / 新版本提醒"
+                NotificationChannel(CHANNEL_ID, "公告通知", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "新公告 / 新版本提醒（静默显示，不弹横幅）"
+                    setSound(null, null)
+                    enableVibration(false)
+                    enableLights(false)
+                    setShowBadge(true)
                 }
             )
             nm.createNotificationChannel(
-                NotificationChannel(MSG_CHANNEL_ID, "站内信", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "新站内信 / 系统消息提醒"
+                NotificationChannel(MSG_CHANNEL_ID, "站内信", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "新站内信 / 系统消息提醒（静默显示，不弹横幅）"
+                    setSound(null, null)
+                    enableVibration(false)
+                    enableLights(false)
+                    setShowBadge(true)
                 }
             )
+            // 删掉历史的高优先级渠道 (旧版会弹横幅)
+            LEGACY_CHANNELS.forEach { id ->
+                try { nm.deleteNotificationChannel(id) } catch (e: Exception) {}
+            }
         }
     }
 
@@ -95,7 +111,11 @@ object AnnouncementNotifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(ann.content))
             .setContentIntent(pi)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setDefaults(0)
+            .setVibrate(null)
             .build()
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(ann.id.toInt(), notif)
@@ -117,7 +137,11 @@ object AnnouncementNotifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(m.content))
             .setContentIntent(pi)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setDefaults(0)
+            .setVibrate(null)
             .build()
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(20000 + m.id.toInt(), notif)

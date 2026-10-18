@@ -21,6 +21,7 @@ import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.AvatarIcon
 import com.canglan.cyancodex.ui.components.CommandCard
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.LoadingBox
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.launch
@@ -78,9 +79,9 @@ fun UserProfileScreen(nav: NavHostController, userId: Long) {
                         }
                     }
                     if (me != null && me.id != p.id) {
-                        Button(
+                        GlassActionButton(filled = true,
                             onClick = {
-                                if (AppState.token == null) { nav.navigate(Routes.LOGIN); return@Button }
+                                if (AppState.token == null) { nav.navigate(Routes.LOGIN); return@GlassActionButton }
                                 scope.launch {
                                     followBusy = true
                                     val next = !p.isFollowing
@@ -100,14 +101,19 @@ fun UserProfileScreen(nav: NavHostController, userId: Long) {
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                             else ButtonDefaults.buttonColors(),
+                            // 玻璃路径读不到 ButtonColors(internal), 定制配色要再给一份
+                            glassTint = if (p.isFollowing) MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.primary,
+                            glassContentColor = if (p.isFollowing) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onPrimary,
                         ) {
                             if (followBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             else Text(if (p.isFollowing) "已关注" else "关注")
                         }
                         // 加好友 (意见 #38)
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {
-                            if (AppState.token == null) { nav.navigate(Routes.LOGIN); return@OutlinedButton }
+                        GlassActionButton(onClick = {
+                            if (AppState.token == null) { nav.navigate(Routes.LOGIN); return@GlassActionButton }
                             scope.launch {
                                 val r = safeApi { ApiClient.get().friendRequest(mapOf("target_id" to p.id.toString())) }
                                 if (r.ok) {

@@ -32,7 +32,7 @@ interface ApiService {
     suspend fun updateProfile(@Body body: Map<String, String>): ApiResp<Any?>
 
     @PUT("api/auth/password")
-    suspend fun changePassword(@Body body: Map<String, String>): ApiResp<Any?>
+    suspend fun changePassword(@Body body: Map<String, String>): ApiResp<ChangePwdResp>
 
     @PUT("api/auth/email")
     suspend fun changeEmail(@Body body: Map<String, String>): ApiResp<Any?>
@@ -53,13 +53,13 @@ interface ApiService {
     suspend fun commandDetail(@Path("id") id: Long): ApiResp<Command>
 
     @POST("api/commands")
-    suspend fun uploadCommand(@Body body: Map<String, String>): ApiResp<IdResp>
+    suspend fun uploadCommand(@Body body: CommandBody): ApiResp<IdResp>
 
     @POST("api/commands/import")
     suspend fun importCommands(@Body body: ImportBody): ApiResp<ImportResp>
 
     @PUT("api/commands/{id}")
-    suspend fun updateCommand(@Path("id") id: Long, @Body body: Map<String, String>): ApiResp<Any?>
+    suspend fun updateCommand(@Path("id") id: Long, @Body body: CommandBody): ApiResp<Any?>
 
     @DELETE("api/commands/{id}")
     suspend fun deleteCommand(@Path("id") id: Long): ApiResp<Any?>
@@ -72,6 +72,9 @@ interface ApiService {
 
     @GET("api/commands/favorites/list")
     suspend fun favorites(): ApiResp<List<Command>>
+
+    @POST("api/commands/{id}/purchase")
+    suspend fun purchaseCommand(@Path("id") id: Long): ApiResp<PurchaseResp>
 
     @GET("api/commands/meta/categories")
     suspend fun categories(): ApiResp<List<Category>>
@@ -108,6 +111,19 @@ interface ApiService {
     @POST("api/points/transfer")
     suspend fun pointsTransfer(@Body body: Map<String, String>): ApiResp<TransferResp>
 
+    // 积分充值 (爱发电): 档位 / 我的充值状态 / 用订单号领取 / 刷新
+    @GET("api/recharge/plans")
+    suspend fun rechargePlans(): ApiResp<RechargePlans>
+
+    @GET("api/recharge/status")
+    suspend fun rechargeStatus(): ApiResp<RechargeStatus>
+
+    @POST("api/recharge/claim")
+    suspend fun rechargeClaim(@Body body: Map<String, String>): ApiResp<RechargeClaim>
+
+    @POST("api/recharge/refresh")
+    suspend fun rechargeRefresh(): ApiResp<RechargeStatus>
+
     // 站内信
     @GET("api/messages")
     suspend fun messages(@Query("page") page: Int, @Query("size") size: Int): ApiResp<MessagePage>
@@ -118,6 +134,23 @@ interface ApiService {
     @POST("api/messages/{id}/read")
     suspend fun markMessageRead(@Path("id") id: Long): ApiResp<Any?>
 
+    // 账号中心: 我的 ID / 最近登录设备 / 绑定账号
+    @GET("api/account/overview")
+    suspend fun accountOverview(): ApiResp<AccountOverview>
+
+    @GET("api/account/devices")
+    suspend fun accountDevices(@Query("size") size: Int = 20): ApiResp<DeviceList>
+
+    @GET("api/account/bindings")
+    suspend fun accountBindings(): ApiResp<BindingList>
+
+    @POST("api/account/bindings/{id}/unbind")
+    suspend fun unbindAccount(@Path("id") id: Long): ApiResp<RemovedResp>
+
+    /** 给当前设备命名 (只更新自己那台设备的显示名) */
+    @POST("api/account/device/rename")
+    suspend fun renameDevice(@Body body: Map<String, String>): ApiResp<SimpleOk>
+
     // AI
     @GET("api/ai/status")
     suspend fun aiStatus(): ApiResp<AiStatus>
@@ -126,7 +159,7 @@ interface ApiService {
     suspend fun aiUnlock(): ApiResp<SimpleOk>
 
     @POST("api/ai/usage")
-    suspend fun aiUsage(@Body body: Map<String, Any>): ApiResp<IdResp>
+    suspend fun aiUsage(@Body body: AiUsageReq): ApiResp<IdResp>
 
     // AI 对话历史
     @GET("api/ai/history")
@@ -135,6 +168,10 @@ interface ApiService {
     // AI 对话代理: 所有对话走服务器(自定义 Key 或平台 AI), 服务器记录全部历史
     @POST("api/ai/proxy")
     suspend fun aiProxy(@Body body: Map<String, String>): ApiResp<AiProxyResp>
+
+    // AI 回答反馈 (有用/没用): 服务器据此做自我进化的质量筛选
+    @POST("api/ai/feedback")
+    suspend fun aiFeedback(@Body body: FeedbackReq): ApiResp<FeedbackResp>
 
     // 生成历史
     @GET("api/history")
@@ -190,11 +227,14 @@ interface ApiService {
     suspend fun submitFeedback(@Body body: Map<String, String>): ApiResp<IdResp>
 
     // 两步验证 (TOTP)
+    @POST("api/auth/logout")
+    suspend fun logout(@Header("Authorization") auth: String, @Body body: LogoutReq): ApiResp<SimpleOk>
+
     @GET("api/auth/2fa/status")
     suspend fun totpStatus(): ApiResp<TotpStatus>
 
     @POST("api/auth/2fa/setup")
-    suspend fun totpSetup(): ApiResp<TotpSetup>
+    suspend fun totpSetup(@Body body: Map<String, String>): ApiResp<TotpSetup>
 
     @POST("api/auth/2fa/verify")
     suspend fun totpVerify(@Body body: Map<String, String>): ApiResp<SimpleOk>
@@ -223,6 +263,50 @@ interface ApiService {
     @POST("api/chat")
     suspend fun sendChat(@Body body: Map<String, String>): ApiResp<ChatMessage?>
 
+    @POST("api/chat/report")
+    suspend fun reportChat(@Body body: ReportChatReq): ApiResp<Any?>
+
+    @DELETE("api/chat/{id}")
+    suspend fun deleteChat(@Path("id") id: Long): ApiResp<Any?>
+
+    // 开学季活动 (分享推广到 QQ 群得积分)
+    @GET("api/activity/school-share")
+    suspend fun schoolShareStatus(): ApiResp<SchoolShareStatus>
+
+    @POST("api/activity/school-share")
+    suspend fun schoolShareConfirm(): ApiResp<SchoolShareResp>
+
+    // 娱乐: 五子棋匹配
+    @POST("api/game/match")
+    suspend fun gameMatch(@Body body: Map<String, String>): ApiResp<com.canglan.cyancodex.data.GameMatchResp>
+
+    @GET("api/game/match/status")
+    suspend fun gameMatchStatus(): ApiResp<com.canglan.cyancodex.data.GameMatchResp>
+
+    @GET("api/game/rooms")
+    suspend fun gameRooms(): ApiResp<List<com.canglan.cyancodex.data.GameRoomInfo>>
+
+    @POST("api/game/rooms")
+    suspend fun gameCreateRoom(@Body body: GameCreateReq): ApiResp<com.canglan.cyancodex.data.GameCreateResp>
+
+    @POST("api/game/rooms/join")
+    suspend fun gameJoinRoom(@Body body: Map<String, String>): ApiResp<com.canglan.cyancodex.data.GameJoinResp>
+
+    @POST("api/game/{roomId}/kick")
+    suspend fun gameKick(@Path("roomId") roomId: String, @Body body: Map<String, Long>): ApiResp<Any?>
+
+    @POST("api/game/{roomId}/ai-move")
+    suspend fun gameAiMove(@Path("roomId") roomId: String): ApiResp<com.canglan.cyancodex.data.GameStateResp>
+
+    @GET("api/game/{roomId}/state")
+    suspend fun gameState(@Path("roomId") roomId: String): ApiResp<com.canglan.cyancodex.data.GameStateResp>
+
+    @POST("api/game/{roomId}/move")
+    suspend fun gameMove(@Path("roomId") roomId: String, @Body body: Map<String, Int>): ApiResp<com.canglan.cyancodex.data.GameStateResp>
+
+    @POST("api/game/{roomId}/leave")
+    suspend fun gameLeave(@Path("roomId") roomId: String): ApiResp<Any?>
+
     // 好友 (意见 #38)
     @GET("api/friends")
     suspend fun friends(@Query("status") status: String?): ApiResp<List<FriendItem>>
@@ -249,26 +333,64 @@ interface ApiService {
     @POST("api/dm/messages")
     suspend fun sendDm(@Body body: Map<String, String>): ApiResp<IdResp?>
 
-    // 插件库 (意见 #37)
+    // 插件库 (意见 #37; 意见 #86 增加适用版本 platform: java/bedrock)
     @GET("api/plugins")
-    suspend fun plugins(@Query("status") status: String?, @Query("page") page: Int, @Query("size") size: Int): ApiResp<PluginPage>
+    suspend fun plugins(
+        @Query("status") status: String?,
+        @Query("platform") platform: String?,
+        @Query("page") page: Int,
+        @Query("size") size: Int,
+    ): ApiResp<PluginPage>
 
     @POST("api/plugins")
     suspend fun uploadPlugin(@Body body: Map<String, String>): ApiResp<IdResp>
 
     @GET("api/plugins/{id}")
     suspend fun pluginDetail(@Path("id") id: Long): ApiResp<Plugin>
+
+    // 看公益广告得积分
+    @GET("api/ad/status")
+    suspend fun adStatus(): ApiResp<AdStatus>
+
+    @POST("api/ad/start")
+    suspend fun adStart(): ApiResp<AdStartResp>
+
+    @POST("api/ad/claim")
+    suspend fun adClaim(@Body body: Map<String, String>): ApiResp<AdClaimResp>
+
+    // 宝贝回家 (公益寻亲信息, 免登录)
+    @GET("api/bh")
+    suspend fun babyHome(): ApiResp<BabyHomeResp>
+
+    // 快捷查询 ID: 中文名 -> 基岩版 ID (内置参考表)
+    @GET("api/mcref/search")
+    suspend fun mcRefSearch(
+        @Query("q") q: String,
+        @Query("kind") kind: String?,
+        @Query("limit") limit: Int,
+    ): ApiResp<McRefList>
+
+    @GET("api/mcref/kinds")
+    suspend fun mcRefKinds(): ApiResp<McRefKinds>
 }
 
 data class ImageResp(val image: String? = null)
 
 data class TotpStatus(val enabled: Boolean = false)
 data class TotpSetup(val secret: String = "", @SerializedName("otpauth_uri") val otpauthUri: String = "")
+/** 修改密码返回: 改密后服务端会作废旧令牌, 这里带回当前设备的新令牌 */
+data class ChangePwdResp(val message: String? = null, val token: String? = null)
+// 具体 body 类型: Retrofit 不接受 Map<String, Any?> 作为 @Body (Kotlin 协变会变成通配符)
+data class LogoutReq(val all: Boolean = false)
+data class ReportChatReq(@SerializedName("message_id") val messageId: Long, val reason: String = "")
+data class AiUsageReq(val prompt: String = "", val result: String = "", val costPoints: Int = 0)
 data class AiProxyResp(
     val content: String? = null,
     val cost: Int = 0,        // 本次消耗积分 (平台 AI)
     val tokens: Int = 0,      // 本次消耗 tokens
     val balance: Int? = null, // 剩余积分 (平台 AI)
+    @SerializedName("turn_id") val turnId: Long = 0L,   // 服务端对话轮次 id (用于反馈)
+    val cached: Boolean = false,                        // 命中经验库直接回答 (不扣积分)
 )
 
 object ApiClient {
@@ -284,17 +406,68 @@ object ApiClient {
 
     /** 当用户修改了 API 地址后调用, 重建客户端 */
     fun reset() {
+        DebugStore.logI("Api", "重建客户端 (下次请求生效), baseUrl=${Session.baseUrl}")
         synchronized(this) { service = null }
+    }
+
+    /**
+     * 这个 host 是不是**我们自己的服务器** —— 决定要不要带用户注入的 cookie。
+     *
+     * ★★ 这是安全闸门, 判据必须**从严**:
+     *   - 只认 `Session.baseUrl` 的 host (即当前生效的服务器域名);
+     *   - 空 host 一律不放行。
+     *
+     * 为什么不做成"任意 host 都带": 用户还配了**自备 AI 域名 / 搜索引擎域名**,
+     * 那些是第三方。cookie 是账号级凭证, 发到第三方 = 主动泄露。
+     * 本函数是最后一道防线 —— 改它之前先想清楚这句话。
+     */
+    private fun isOwnHost(host: String): Boolean {
+        if (host.isBlank()) return false
+        val own = runCatching {
+            java.net.URI(Session.baseUrl).host?.lowercase()
+        }.getOrNull() ?: return false
+        return own.isNotBlank() && host == own
     }
 
     private fun build(): ApiService {
         val base = Session.baseUrl
+        DebugStore.logI("Api", "初始化 Retrofit, baseUrl=$base" + if (Session.usingCustomBaseUrl) " (调试自定义)" else " (内置默认)")
         val authInterceptor = Interceptor { chain ->
             val req = chain.request()
             val b = req.newBuilder()
-            Session.token?.let { b.header("Authorization", "Bearer $it") }
+            // ⛔ Cookie 登录态下**不发** Authorization (2026-10-05): token 是哨兵值
+            //   [Session.COOKIE_TOKEN], 它不是真凭证 —— 发出去服务端 401, 再触发下面的
+            //   authFailInterceptor 把会话清掉(表现为"刚用 cookie 登录就掉线")。
+            //   这条通道本来就只有 Cookie 一个凭证, 不带 Authorization 才是对的。
+            val tk = Session.token
+            if (tk != null && tk != Session.COOKIE_TOKEN) b.header("Authorization", "Bearer $tk")
             b.header("Accept", "application/json")
+            // ★★ 手动注入的 Cookie (隐藏入口, 2026-10-05) —— 与 Authorization 并行, 两者都带。
+            //   ⛔⛔ **只给自己域名**。这是硬约束: Retrofit 的 baseUrl 是自家服务器, 但
+            //      Api 客户端**只发往自家服务器**(AI 直连走的是 AiSearch/AiClient 各自的 OkHttp,
+            //      不经过这里), 所以这里天然安全。但为了防将来有人把这个 client 复用出去,
+            //      仍然显式判一次 host —— 防御性写法, 别删。
+            // ★★ 2026-10-05 再加一道: 必须 `DebugStore.cookieEnabled` —— 调试面板总开关(仿开发者选项)
+            //      关掉后 cookie **不再注入**。用户要的"关闭开关"要能真的把这条能力关死,
+            //      而不是只藏起 UI。判 cookieEnabled(= active = 解锁 且 总开关开着):
+            //      "开调试模式就开" —— 与用户在登录页看到入口的条件**完全一致**, 不会出现
+            //      "入口看得见却注不进去"这种自相矛盾。
+            //
+            // ★★ 例外: **当前会话就是 Cookie 登录态时, 关掉调试模式也照样注入** (2026-10-05)。
+            //      原因: 这时 cookie 已经是用户的**登录凭证**(token 只是哨兵值),
+            //      关调试模式把它掐掉 = 把用户当场踢下线, 而且因为哨兵 token 非空,
+            //      界面还会显示"已登录"却所有请求 401 —— 最糟的一种状态。
+            //      "关调试就不注入"针对的是**调试注入**这个动作, 不是"注销我的登录"。
+            if (DebugStore.cookieEnabled || Session.token == Session.COOKIE_TOKEN) {
+                Session.cookie?.let { ck ->
+                    val host = req.url.host.lowercase()
+                    if (isOwnHost(host)) b.header("Cookie", ck)
+                }
+            }
             b.header("X-Device-Id", Session.deviceId)
+            // 设备名可能是中文 (用户自己起的名字/国产机型), HTTP 头只能放 ASCII, 先做百分号编码,
+            // 服务器侧 decodeURIComponent 还原 (否则 OkHttp 会直接抛异常导致所有请求失败)
+            b.header("X-Device-Name", android.net.Uri.encode(Session.deviceName))
             b.header("X-App-Version", BuildConfig.VERSION_NAME)
             // 客户端检测: 每次请求携带当前 APK 签名 SHA-256, 服务器与白名单比对,
             // 不符 -> 账号封禁; 本地拿不到签名(异常环境)时也上报该标识
@@ -325,7 +498,17 @@ object ApiClient {
                         try {
                             val obj = org.json.JSONObject(raw)
                             if (!obj.optBoolean("ok", true)) {
-                                val body = if (resp.code == 401 && req.header("Authorization") != null) {
+                                // ★ 2026-10-07: 401 改写这条路径以前是"隐形"的 ——
+                                //   请求页只看到 401, 日志里却什么都没有, 排查时不知道
+                                //   是谁把它变成了"登录已过期"。加一条 W 级说明。
+                                val expired = resp.code == 401 && req.header("Authorization") != null
+                                if (expired) {
+                                    DebugStore.logW(
+                                        "Api",
+                                        "401 登录已过期 → 已改写成业务错误 (${req.url.encodedPath})",
+                                    )
+                                }
+                                val body = if (expired) {
                                     org.json.JSONObject().put("ok", false)
                                         .put("error", "登录已过期，请重新登录").toString()
                                 } else raw
@@ -340,10 +523,72 @@ object ApiClient {
             }
             resp
         }
+        // 调试面板: ① 按规则改写接口路径 ② 记录 method / URL / 状态码 / 耗时 / 错误
+        // (未解锁时零开销 —— 第一行就 return)
+        // ★ 2026-10-05: 判据从 unlocked 改成 active（解锁 且 总开关开着）——
+        //   用户要的"仿开发者选项的关闭开关"必须能**真正停掉**路径改写与请求记录,
+        //   而不是只把面板 UI 藏起来。详见 DebugStore.active。
+        val debugInterceptor = Interceptor { chain ->
+            if (!DebugStore.active) return@Interceptor chain.proceed(chain.request())
+
+            // ① 路径改写: /api/commands -> /api/abc (前缀匹配, query 原样保留)
+            var req = chain.request()
+            val newPath = DebugStore.rewritePath(req.url.encodedPath)
+            if (newPath != null) {
+                // ★ 必须用 encodedPath 重建, 且 query 单独保留 ——
+                // 直接改 URL 的 path 会把 ?a=b 一起丢掉
+                val u = req.url.newBuilder().encodedPath(newPath).build()
+                // ★ 动的是"最终 URL", 所以 authInterceptor 之后加的 header 不受影响;
+                //   但 X-App-Signature 之类是按 baseUrl 算的, 改路径不影响签名
+                // ★ W 级: 路径改写是用户主动配的"魔法", 排查"请求打到哪去了"必须先看到它
+                DebugStore.logW("Net", "路径改写 ${req.url.encodedPath} -> $newPath")
+                req = req.newBuilder().url(u).build()
+            }
+
+            val path = req.url.encodedPath
+            val t0 = System.currentTimeMillis()
+            try {
+                val resp = chain.proceed(req)
+                val cost = System.currentTimeMillis() - t0
+                DebugStore.record(
+                    DebugStore.ReqRecord(
+                        time = t0,
+                        method = req.method,
+                        url = req.url.toString(),
+                        code = resp.code,
+                        costMs = cost,
+                    )
+                )
+                // ★ 2026-10-07 新增: 每条请求再往**日志**里写一行(V 级)。
+                //   请求页是"按条罗列的表", 日志页是"时间线" —— 排查时按时间线串起来更快
+                //   (能看到"启动 → 拉公告 → 拉用户 → 失败"的先后关系)。
+                //   V 级是故意的: 请求量大时可用级别筛选一键隐藏, 不挤占其他日志。
+                DebugStore.logV("Net", "${req.method} $path → ${resp.code} · ${cost}ms")
+                resp
+            } catch (e: Exception) {
+                val cost = System.currentTimeMillis() - t0
+                val err = e.javaClass.simpleName + ": " + (e.message ?: "")
+                DebugStore.record(
+                    DebugStore.ReqRecord(
+                        time = t0,
+                        method = req.method,
+                        url = req.url.toString(),
+                        code = 0,
+                        costMs = cost,
+                        error = err,
+                    )
+                )
+                // ★ E 级: 连接失败 / 超时是最常被追问的故障, 必须在日志里显眼
+                DebugStore.logE("Net", "${req.method} $path 失败 · ${cost}ms · $err")
+                throw e
+            }
+        }
         val client = OkHttpClient.Builder()
+            .dns(ServerDns)                       // 直连高防主服务器 IP (备用线路自动回退)
             .connectTimeout(25, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)
+            .addInterceptor(debugInterceptor)
             .addInterceptor(errorBodyInterceptor)
             .addInterceptor(authInterceptor)
             .addInterceptor(authFailInterceptor)

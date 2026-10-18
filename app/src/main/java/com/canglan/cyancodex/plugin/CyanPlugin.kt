@@ -40,6 +40,18 @@ interface BackgroundProvider {
     fun background(): PluginBackground?
 }
 
+/**
+ * 积木插件规格接口 (插件工坊专用)
+ *
+ * 「插件工坊」图形化生成的 JAR 里带的是行为规格 (cyancodex-plugin.json),
+ * PluginManager 在实例化后、读取 id 之前把规格注入插件, 插件再按规格执行动作。
+ * 手写插件无需实现本接口。
+ */
+interface SpecPlugin {
+    /** 注入行为规格 JSON */
+    fun attachSpec(specJson: String)
+}
+
 /** 插件提供的背景效果描述 */
 data class PluginBackground(
     val kind: String = "gradient",          // gradient=渐变 color=纯色 image=图片(预留)

@@ -18,6 +18,8 @@ import com.canglan.cyancodex.generators.Generators
 import com.canglan.cyancodex.ui.AppState
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.CommandOutputBox
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
 import com.canglan.cyancodex.ui.components.OutlinedTextField2
 import com.canglan.cyancodex.ui.components.safeApi
 import com.google.gson.Gson
@@ -71,14 +73,14 @@ fun ScrollerScreen(nav: NavHostController) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(Generators.MC_COLORS.size) { i ->
                     val (k, v) = Generators.MC_COLORS.entries.elementAt(i)
-                    FilterChip(selected = color == v, onClick = { color = v }, label = { Text(k) })
+                    GlassFilterChip(selected = color == v, onClick = { color = v }, label = { Text(k) })
                 }
             }
 
             Text("模式:", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = mode == "roll", onClick = { mode = "roll" }, label = { Text("轮播公告(title)") })
-                FilterChip(selected = mode == "banner", onClick = { mode = "banner" }, label = { Text("静态横幅(盔甲架)") })
+                GlassFilterChip(selected = mode == "roll", onClick = { mode = "roll" }, label = { Text("轮播公告(title)") })
+                GlassFilterChip(selected = mode == "banner", onClick = { mode = "banner" }, label = { Text("静态横幅(盔甲架)") })
             }
 
             if (mode == "roll") {
@@ -93,7 +95,7 @@ fun ScrollerScreen(nav: NavHostController) {
                 OutlinedTextField2(gap, { gap = it }, "字符间距", modifier = Modifier.weight(1f))
             }
 
-            Button(onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
+            GlassActionButton(filled = true, onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("生成指令")
             }
             result?.let { CommandOutputBox(it) }

@@ -18,6 +18,7 @@ import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.EmptyState
+import com.canglan.cyancodex.ui.components.GlassTextButton
 import com.canglan.cyancodex.ui.components.copyToClipboard
 import com.canglan.cyancodex.ui.components.safeApi
 
@@ -67,7 +68,8 @@ fun AiHistoryScreen(nav: NavHostController) {
                                     color = MaterialTheme.colorScheme.secondary,
                                     maxLines = 6,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                TextButton(onClick = { copyToClipboard(ctx, h.result, "已复制 AI 回复") },
+                                // 玻璃化: 采样源 = 卡片底色(surface, 即默认值)
+                                GlassTextButton(onClick = { copyToClipboard(ctx, h.result, "已复制 AI 回复") },
                                     modifier = Modifier.align(Alignment.End)) {
                                     Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp))
                                     Spacer(Modifier.width(4.dp))

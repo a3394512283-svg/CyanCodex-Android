@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.data.PointsLogItem
+import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.LoadingBox
 import com.canglan.cyancodex.ui.components.safeApi
@@ -34,7 +35,15 @@ fun PointsLogScreen(nav: NavHostController) {
     }
 
     Scaffold(topBar = {
-        AppTopBar(title = "积分明细", icon = Icons.Default.AccountBalanceWallet, onBack = { nav.popBackStack() })
+        AppTopBar(
+            title = "积分明细",
+            icon = Icons.Default.AccountBalanceWallet,
+            onBack = { nav.popBackStack() },
+            // 积分不够时最自然的诉求就是"怎么弄积分"，入口直接放在这里
+            actions = {
+                TextButton(onClick = { nav.navigate(Routes.RECHARGE) }) { Text("充值") }
+            },
+        )
     }) { pad ->
         if (loading && list.isEmpty()) { LoadingBox(Modifier.padding(pad)); return@Scaffold }
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp),

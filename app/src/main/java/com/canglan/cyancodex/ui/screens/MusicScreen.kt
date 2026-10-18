@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.data.MidiParser
+import com.canglan.cyancodex.data.PendingMidi
 import com.canglan.cyancodex.data.MusicPreview
 import com.canglan.cyancodex.data.Session
 import com.canglan.cyancodex.generators.Generators
@@ -36,6 +37,10 @@ import com.canglan.cyancodex.generators.Generators.NoteEvent
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.AppState
 import com.canglan.cyancodex.ui.components.CommandOutputBox
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
+import com.canglan.cyancodex.ui.components.TopBarAction
+import com.canglan.cyancodex.ui.components.TopBarTextAction
 import com.canglan.cyancodex.ui.components.safeApi
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
@@ -125,58 +130,72 @@ fun MusicScreen(nav: NavHostController) {
     }
 
     // ============ MIDI 导入 (参考 HASOC 工具箱) ============
+    // 抽成函数: 除了系统文件选择器, 「MIDI 工具」页(音频转 MIDI / 曲库下载)也会把字节直接送进来
+    fun importMidiBytes(bytes: ByteArray) {
+        if (bytes.isEmpty()) {
+            android.widget.Toast.makeText(ctx, "无法读取文件", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val song = MidiParser.parse(bytes)
+        if (song == null) {
+            android.widget.Toast.makeText(ctx, "无法解析 MIDI 文件", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        // 速度: 每四分音符微秒 -> 每拍游戏刻 (1 游戏刻 = 50ms)
+        tempo = (Math.round(song.tempoUs / 50000.0).toInt()).coerceIn(2, 40)
+        loop = true
+        val ppq = song.ppq
+        val m = mutableMapOf<Pair<Int, Int>, Int>()
+        song.notes.forEach { n ->
+            // 量化到最近的拍 -> 网格列 (前 cols 拍, 超长截断)
+            val col = Math.round(n.tick.toDouble() / ppq).toInt()
+            if (col !in 0 until cols) return@forEach
+            val inst = midiInstrument(song.programs.getOrElse(n.channel) { -1 }, n.channel, n.note)
+            val instIdx = INSTRUMENTS.indexOf(inst).takeIf { it >= 0 } ?: 0
+            val key = Pair(col, instIdx)
+            // 同列同乐器冲突时保留音高更高的
+            val p = midiPitch(n.note)
+            m[key] = maxOf(m[key] ?: -1, p)
+        }
+        events = m
+        result = null
+        val dropped = song.notes.count { Math.round(it.tick.toDouble() / ppq).toInt() !in 0 until cols }
+        android.widget.Toast.makeText(
+            ctx,
+            if (dropped > 0) "MIDI 导入成功: ${song.notes.size} 音符, 超出 $cols 拍截断 $dropped 个" else "MIDI 导入成功: ${song.notes.size} 音符",
+            android.widget.Toast.LENGTH_LONG).show()
+    }
+
     val midiLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
                 val bytes = runCatching {
                     ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) {
+                if (bytes == null) {
                     android.widget.Toast.makeText(ctx, "无法读取文件", android.widget.Toast.LENGTH_SHORT).show()
-                    return@launch
+                } else {
+                    importMidiBytes(bytes)
                 }
-                val song = MidiParser.parse(bytes)
-                if (song == null) {
-                    android.widget.Toast.makeText(ctx, "无法解析 MIDI 文件", android.widget.Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                // 速度: 每四分音符微秒 -> 每拍游戏刻 (1 游戏刻 = 50ms)
-                tempo = (Math.round(song.tempoUs / 50000.0).toInt()).coerceIn(2, 40)
-                loop = true
-                val ppq = song.ppq
-                val m = mutableMapOf<Pair<Int, Int>, Int>()
-                song.notes.forEach { n ->
-                    // 量化到最近的拍 -> 网格列 (前 cols 拍, 超长截断)
-                    val col = Math.round(n.tick.toDouble() / ppq).toInt()
-                    if (col !in 0 until cols) return@forEach
-                    val inst = midiInstrument(song.programs.getOrElse(n.channel) { -1 }, n.channel, n.note)
-                    val instIdx = INSTRUMENTS.indexOf(inst).takeIf { it >= 0 } ?: 0
-                    val key = Pair(col, instIdx)
-                    // 同列同乐器冲突时保留音高更高的
-                    val p = midiPitch(n.note)
-                    m[key] = maxOf(m[key] ?: -1, p)
-                }
-                events = m
-                result = null
-                val dropped = song.notes.count { Math.round(it.tick.toDouble() / ppq).toInt() !in 0 until cols }
-                android.widget.Toast.makeText(
-                    ctx,
-                    if (dropped > 0) "MIDI 导入成功: ${song.notes.size} 音符, 超出 $cols 拍截断 $dropped 个" else "MIDI 导入成功: ${song.notes.size} 音符",
-                    android.widget.Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    // 从「MIDI 工具」页带过来的内容: 取一次就导入
+    LaunchedEffect(Unit) {
+        PendingMidi.take()?.let { importMidiBytes(it) }
     }
 
     Scaffold(
         topBar = {
             AppTopBar(title = "音乐生成器", icon = Icons.Default.MusicNote, onBack = { nav.popBackStack() }, actions = {
-                TextButton(onClick = { events = emptyMap(); result = null }) {
-                    Icon(Icons.Default.DeleteSweep, "清空", Modifier.size(18.dp))
+                TopBarAction(onClick = { events = emptyMap(); result = null }) {
+                    Icon(Icons.Default.DeleteSweep, "清空", Modifier.size(20.dp))
                 }
-                TextButton(onClick = { midiLauncher.launch(arrayOf("audio/midi", "audio/x-midi", "application/x-midi", "*/*")) }) {
+                TopBarTextAction(onClick = { midiLauncher.launch(arrayOf("audio/midi", "audio/x-midi", "application/x-midi", "*/*")) }) {
                     Text("MIDI")
                 }
-                TextButton(onClick = {
+                TopBarTextAction(onClick = {
                     showJson = !showJson
                     if (showJson) jsonText = eventsJson()
                 }) { Text("JSON") }
@@ -197,7 +216,7 @@ fun MusicScreen(nav: NavHostController) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("网格长度: $cols 拍", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                 listOf(16, 32, 64, 128, 256).forEach { n ->
-                    FilterChip(
+                    GlassFilterChip(
                         selected = cols == n,
                         onClick = {
                             // 缩短时截掉超出的音符
@@ -288,13 +307,13 @@ fun MusicScreen(nav: NavHostController) {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Button(onClick = {
+                GlassActionButton(filled = true, onClick = {
                     val evs = buildEvents()
                     if (evs.isEmpty()) {
                         android.widget.Toast.makeText(ctx, "请先在网格中放置音符", android.widget.Toast.LENGTH_SHORT).show()
-                        return@Button
+                        return@GlassActionButton
                     }
-                    if (previewing) { MusicPreview.stop(); previewing = false; return@Button }
+                    if (previewing) { MusicPreview.stop(); previewing = false; return@GlassActionButton }
                     previewing = true
                     MusicPreview.play(evs, tempo * 50) {
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch { previewing = false }
@@ -304,7 +323,7 @@ fun MusicScreen(nav: NavHostController) {
                     Spacer(Modifier.width(6.dp))
                     Text(if (previewing) "停止试听" else "试听")
                 }
-                Button(onClick = { generate() }, modifier = Modifier.weight(1f)) {
+                GlassActionButton(filled = true, onClick = { generate() }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("生成音乐指令")
                 }
             }

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.components.AppTopBar
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.launch
 
@@ -37,6 +38,8 @@ fun ChangePasswordScreen(nav: NavHostController) {
             val r = safeApi { ApiClient.get().changePassword(mapOf("old_password" to old, "new_password" to new)) }
             busy = false
             if (r.ok) {
+                // 改密后服务端已作废所有旧令牌, 用返回的新令牌续上当前设备登录态
+                r.data?.token?.let { com.canglan.cyancodex.ui.AppState.updateToken(it) }
                 android.widget.Toast.makeText(ctx, "密码修改成功", android.widget.Toast.LENGTH_SHORT).show()
                 nav.popBackStack()
             } else msg = r.error ?: "修改失败"
@@ -63,7 +66,7 @@ fun ChangePasswordScreen(nav: NavHostController) {
             if (msg.isNotBlank()) {
                 Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            GlassActionButton(filled = true, onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (busy) "提交中…" else "确认修改")
             }
         }

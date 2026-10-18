@@ -20,6 +20,7 @@ import com.canglan.cyancodex.generators.Generators
 import com.canglan.cyancodex.ui.AppState
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.CommandOutputBox
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.OutlinedTextField2
 import com.canglan.cyancodex.ui.components.safeApi
 import com.google.gson.Gson
@@ -107,7 +108,7 @@ fun EnumerateScreen(nav: NavHostController) {
             }
             item {
                 if (tip.isNotBlank()) Text(tip, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                Button(onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
+                GlassActionButton(filled = true, onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("开始穷举")
                 }
             }

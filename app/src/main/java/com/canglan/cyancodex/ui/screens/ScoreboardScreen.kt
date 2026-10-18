@@ -23,6 +23,8 @@ import com.canglan.cyancodex.generators.Generators.TDisplayLine
 import com.canglan.cyancodex.ui.AppState
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.CommandOutputBox
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
 import com.canglan.cyancodex.ui.components.OutlinedTextField2
 import com.canglan.cyancodex.ui.components.safeApi
 import com.google.gson.Gson
@@ -41,6 +43,10 @@ fun ScoreboardScreen(nav: NavHostController) {
     var slot by remember { mutableStateOf("sidebar") }
     var tpos by remember { mutableStateOf("title") }
     var entries by remember { mutableStateOf(listOf(ScoreboardEntry("Steve", 20), ScoreboardEntry("Alex", 20))) }
+    // #53 修复: 分数输入用文本态 (允许清空/中间态, 不再每键即时转 Int 导致删不掉/光标乱跳)
+    var entryTexts by remember {
+        mutableStateOf(listOf("20", "20"))
+    }
     var tlines by remember {
         mutableStateOf(listOf(
             TDisplayLine("生命值: ", "hp", ""),
@@ -53,21 +59,25 @@ fun ScoreboardScreen(nav: NavHostController) {
     val tposes = listOf("title" to "标题", "subtitle" to "副标题", "actionbar" to "快捷栏上方")
 
     fun generate() {
+        // 分数输入文本态 -> 数值 (空/非法按 0)
+        val resolved = entries.mapIndexed { i, e ->
+            e.copy(value = entryTexts.getOrElse(i) { e.value.toString() }.trim().toIntOrNull() ?: 0)
+        }
         val cmds = Generators.scoreboard(Generators.ScoreboardArgs(
             objective = objective, displayName = displayName, slot = slot,
-            mode = mode, tpos = tpos, entries = entries, tlines = tlines,
+            mode = mode, tpos = tpos, entries = resolved, tlines = tlines,
         ))
         result = cmds
         Session.addLocalHistory("tdisplay", Gson().toJson(mapOf(
             "objective" to objective, "displayName" to displayName,
             "mode" to mode, "slot" to slot, "tpos" to tpos,
-            "entries" to entries, "tlines" to tlines)), cmds.joinToString("\n"))
+            "entries" to resolved, "tlines" to tlines)), cmds.joinToString("\n"))
         scope.launch {
             if (AppState.token != null) {
                 val input = Gson().toJson(mapOf(
                     "objective" to objective, "displayName" to displayName,
                     "mode" to mode, "slot" to slot, "tpos" to tpos,
-                    "entries" to entries, "tlines" to tlines))
+                    "entries" to resolved, "tlines" to tlines))
                 safeApi { ApiClient.get().saveHistory(mapOf(
                     "gen_type" to "tdisplay", "input_json" to input, "output_command" to cmds.joinToString("\n"))) }
             }
@@ -84,8 +94,8 @@ fun ScoreboardScreen(nav: NavHostController) {
             item {
                 Text("生成模式:", style = MaterialTheme.typography.labelMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = mode == "sidebar", onClick = { mode = "sidebar" }, label = { Text("侧边栏计分板") })
-                    FilterChip(selected = mode == "tdisplay", onClick = { mode = "tdisplay" }, label = { Text("T显字幕(titleraw)") })
+                    GlassFilterChip(selected = mode == "sidebar", onClick = { mode = "sidebar" }, label = { Text("侧边栏计分板") })
+                    GlassFilterChip(selected = mode == "tdisplay", onClick = { mode = "tdisplay" }, label = { Text("T显字幕(titleraw)") })
                 }
             }
             item {
@@ -101,7 +111,7 @@ fun ScoreboardScreen(nav: NavHostController) {
                     Text("显示位置:", style = MaterialTheme.typography.labelMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(slots.size) { i ->
-                            FilterChip(selected = slot == slots[i].first, onClick = { slot = slots[i].first },
+                            GlassFilterChip(selected = slot == slots[i].first, onClick = { slot = slots[i].first },
                                 label = { Text(slots[i].second) })
                         }
                     }
@@ -109,7 +119,10 @@ fun ScoreboardScreen(nav: NavHostController) {
                 item {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text("玩家分数", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        FilledTonalButton(onClick = { entries = entries + ScoreboardEntry("", 0) }) {
+                        FilledTonalButton(onClick = {
+                            entries = entries + ScoreboardEntry("", 0)
+                            entryTexts = entryTexts + "0"
+                        }) {
                             Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text("添加")
                         }
                     }
@@ -119,10 +132,16 @@ fun ScoreboardScreen(nav: NavHostController) {
                         OutlinedTextField2(e.player, { v ->
                             entries = entries.toMutableList().also { it[idx] = e.copy(player = v) }
                         }, "玩家名", modifier = Modifier.weight(1.4f))
-                        OutlinedTextField2(e.value.toString(), { v ->
-                            entries = entries.toMutableList().also { it[idx] = e.copy(value = v.toIntOrNull() ?: 0) }
+                        OutlinedTextField2(entryTexts.getOrElse(idx) { "0" }, { v ->
+                            // #53: 允许输入中间态/清空, 不即时转 Int
+                            if (v.all { it.isDigit() }) {
+                                entryTexts = entryTexts.toMutableList().also { if (idx < it.size) it[idx] = v }
+                            }
                         }, "分数", modifier = Modifier.weight(1f))
-                        IconButton(onClick = { entries = entries.filterIndexed { i, _ -> i != idx } }) {
+                        IconButton(onClick = {
+                            entries = entries.filterIndexed { i, _ -> i != idx }
+                            entryTexts = entryTexts.filterIndexed { i, _ -> i != idx }
+                        }) {
                             Icon(Icons.Default.Close, "删除")
                         }
                     }
@@ -132,7 +151,7 @@ fun ScoreboardScreen(nav: NavHostController) {
                     Text("显示位置:", style = MaterialTheme.typography.labelMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(tposes.size) { i ->
-                            FilterChip(selected = tpos == tposes[i].first, onClick = { tpos = tposes[i].first },
+                            GlassFilterChip(selected = tpos == tposes[i].first, onClick = { tpos = tposes[i].first },
                                 label = { Text(tposes[i].second) })
                         }
                     }
@@ -163,7 +182,7 @@ fun ScoreboardScreen(nav: NavHostController) {
                 }
             }
             item {
-                Button(onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
+                GlassActionButton(filled = true, onClick = { generate() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("生成指令")
                 }
             }

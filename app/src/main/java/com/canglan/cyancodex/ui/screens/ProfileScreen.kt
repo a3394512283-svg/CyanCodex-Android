@@ -9,14 +9,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
@@ -30,9 +35,11 @@ import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ime.CyanCodexImeSettings
 import com.canglan.cyancodex.ui.AppState
+import com.canglan.cyancodex.ui.LocalGlassBottomInset
 import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.AvatarIcon
+import com.canglan.cyancodex.ui.components.GlassActionButton
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.launch
 
@@ -61,12 +68,39 @@ fun ProfileScreen(nav: NavHostController) {
 
     val unreadDesc = if (unread > 0) "$unread 条未读 · 系统通知 / 管理员消息" else "系统通知 / 管理员消息"
 
+    // 账号中心概览: 设备数 / 绑定数 (用于菜单副标题)
+    var deviceCount by remember { mutableStateOf(-1) }
+    var bindingCount by remember { mutableStateOf(-1) }
+    LaunchedEffect(Unit) {
+        if (AppState.token != null) {
+            val o = safeApi { ApiClient.get().accountOverview() }
+            if (o.ok) {
+                deviceCount = o.data?.deviceCount ?: -1
+                bindingCount = o.data?.bindingCount ?: -1
+            }
+        }
+    }
+    val idDesc = buildString {
+        append("查看账号 ID、注册与最近登录")
+        if (deviceCount > 0) append(" · 最近 ${deviceCount} 台设备")
+    }
+    val bindDesc = when {
+        bindingCount > 0 -> "已绑定 $bindingCount 个账号 · QQ 机器人（微信后续开放）"
+        bindingCount == 0 -> "未绑定 · 可在 QQ 里查积分 / 签到 / 搜指令"
+        else -> "QQ 机器人绑定状态（微信后续开放）"
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(title = "我的", icon = Icons.Default.Person)
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
+        // padding 放在 verticalScroll 之后 = 内容底部留白(滚动区能铺到屏幕底), 而不是缩视口
+        Column(
+            Modifier.padding(pad).fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = LocalGlassBottomInset.current),
+        ) {
             // 用户卡片
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -105,8 +139,8 @@ fun ProfileScreen(nav: NavHostController) {
                     }
                     if (user == null) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Button(onClick = { nav.navigate(Routes.LOGIN) }) { Text("登录") }
-                            OutlinedButton(onClick = { nav.navigate(Routes.LOGIN) }) { Text("注册") }
+                            GlassActionButton(filled = true, onClick = { nav.navigate(Routes.LOGIN) }) { Text("登录") }
+                            GlassActionButton(onClick = { nav.navigate(Routes.LOGIN) }) { Text("注册") }
                         }
                     }
                 }
@@ -114,7 +148,12 @@ fun ProfileScreen(nav: NavHostController) {
 
             // 菜单
             MenuRow(Icons.Default.Person, "个人中心", "修改头像 / 性别 / 昵称(必填)") { nav.navigate(Routes.PROFILE_EDIT) }
+            MenuRow(Icons.Default.Badge, "我的 ID 与登录设备", idDesc) { nav.navigate(Routes.MY_ID) }
+            MenuRow(Icons.Default.Link, "绑定账号", bindDesc) { nav.navigate(Routes.BINDINGS) }
             MenuRow(Icons.Default.EventAvailable, "每日签到", "每日签到领积分，积分可解锁 AI") { nav.navigate(Routes.CHECKIN) }
+            MenuRow(Icons.Default.PlayCircle, "看广告得积分", "看完一条央视公益广告得积分，每天最多 20 次") { nav.navigate(Routes.AD_REWARD) }
+            MenuRow(Icons.Default.Search, "快捷查询 ID", "输入中文查基岩版 ID（物品/方块/附魔…7977 条）") { nav.navigate(Routes.MC_ID) }
+            MenuRow(Icons.Default.Favorite, "宝贝回家", "公益寻亲信息，让每个页面都是传播希望的窗口") { nav.navigate(Routes.BABY_HOME) }
             MenuRow(Icons.Default.AccountBalanceWallet, "积分明细", "查看积分增加 / 消耗记录") { nav.navigate(Routes.POINTS_LOG) }
             MenuRow(Icons.Default.Send, "积分转账", "转给好友，手续费 20%") { showTransfer = true }
             MenuRow(Icons.Default.MailOutline, "站内信", unreadDesc) { nav.navigate(Routes.MESSAGES) }
@@ -132,13 +171,15 @@ fun ProfileScreen(nav: NavHostController) {
             MenuRow(Icons.Default.Info, "关于", "沧蓝工坊 · CyanCodex") { nav.navigate(Routes.ABOUT) }
 
             if (user != null) {
-                Button(
+                GlassActionButton(filled = true,
                     onClick = {
-                        scope.launch {
-                            AppState.logout()
-                        }
+                        // 本地立即退出, 服务端令牌吊销由 AppState 在应用级协程里通知
+                        AppState.logout()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    // 玻璃路径读不到 ButtonColors(内部 API 是 internal), 定制配色要再给一份
+                    glassTint = MaterialTheme.colorScheme.error,
+                    glassContentColor = MaterialTheme.colorScheme.onError,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                 ) { Text("退出登录") }
             }

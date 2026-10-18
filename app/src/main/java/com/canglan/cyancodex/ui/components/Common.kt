@@ -7,6 +7,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,29 +29,44 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.canglan.cyancodex.BuildConfig
 import com.canglan.cyancodex.data.ApiResp
 import com.canglan.cyancodex.data.Command
 import com.canglan.cyancodex.data.Session
+import com.canglan.cyancodex.ui.AppState
+import com.canglan.cyancodex.ui.liquidGlassActive
+import com.canglan.cyancodex.ui.liquidglass.LiquidButton
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -56,6 +77,7 @@ private val remoteImageCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024
 }
 private val remoteImageClient: OkHttpClient by lazy {
     OkHttpClient.Builder()
+        .dns(com.canglan.cyancodex.data.ServerDns)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
@@ -119,6 +141,7 @@ private val avatarCache = object : LruCache<String, Bitmap>(10 * 1024 * 1024) {
 /** 加载网络图片的小客户端 */
 private val imageClient: OkHttpClient by lazy {
     OkHttpClient.Builder()
+        .dns(com.canglan.cyancodex.data.ServerDns)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
@@ -128,14 +151,16 @@ private val imageClient: OkHttpClient by lazy {
  * 服务器图片头像: code 以 "/" 开头表示服务器路径(/uploads/...), 否则按内置图标库渲染。
  */
 @Composable
-fun AvatarIcon(code: String, size: androidx.compose.ui.unit.Dp = 44.dp) {
+fun AvatarIcon(code: String, size: androidx.compose.ui.unit.Dp = 44.dp, onClick: (() -> Unit)? = null) {
     val url = if (code.startsWith("/")) Session.baseUrl.trimEnd('/') + code else null
+    val baseMod = Modifier.size(size).clip(CircleShape)
+    val clickMod = if (onClick != null) baseMod.clickable { onClick() } else baseMod
     if (url != null) {
-        ServerImage(url, size)
+        ServerImage(url, size, onClick = onClick)
     } else {
         val (icon, color) = avatarMap[code] ?: (Icons.Default.AccountCircle to Color(0xFF4ADE80))
         Box(
-            Modifier.size(size).clip(CircleShape).background(color.copy(alpha = 0.15f)),
+            clickMod.background(color.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(size * 0.62f))
@@ -145,7 +170,7 @@ fun AvatarIcon(code: String, size: androidx.compose.ui.unit.Dp = 44.dp) {
 
 /** 网络图片加载 (圆形容器, 带缓存), 失败时显示占位人像 */
 @Composable
-fun ServerImage(url: String, size: androidx.compose.ui.unit.Dp, shape: Shape = CircleShape) {
+fun ServerImage(url: String, size: androidx.compose.ui.unit.Dp, shape: Shape = CircleShape, onClick: (() -> Unit)? = null) {
     var bmp by remember(url) { mutableStateOf(avatarCache.get(url)) }
     LaunchedEffect(url) {
         if (bmp == null) {
@@ -169,12 +194,14 @@ fun ServerImage(url: String, size: androidx.compose.ui.unit.Dp, shape: Shape = C
         Image(
             bitmap = b.asImageBitmap(),
             contentDescription = null,
-            modifier = Modifier.size(size).clip(shape),
+            modifier = if (onClick != null) Modifier.size(size).clip(shape).clickable { onClick() }
+                else Modifier.size(size).clip(shape),
             contentScale = ContentScale.Crop,
         )
     } else {
         Box(
-            Modifier.size(size).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant),
+            (if (onClick != null) Modifier.size(size).clip(shape).clickable { onClick() }
+                else Modifier.size(size).clip(shape)).background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -184,29 +211,155 @@ fun ServerImage(url: String, size: androidx.compose.ui.unit.Dp, shape: Shape = C
 }
 
 /**
+ * 顶栏玻璃按钮的采样源 —— 由 [AppTopBar] 提供。
+ * null 表示当前不走玻璃(玻璃未开启 / 系统低于 API 31), 此时 [TopBarAction] 回落普通 IconButton。
+ */
+val LocalTopBarBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
+/**
+ * 顶栏右侧的图标按钮 —— 玻璃开启时是**玻璃小圆球**, 与左侧返回键同一套外观与尺寸;
+ * 否则回落 Material3 的 [IconButton], 与原版逐字一致。
+ *
+ * 为什么要有这个组件: 各页面的 `actions` 槽里原来写的是 `IconButton` / `TextButton`,
+ * 它们拿不到顶栏内部那个 backdrop, 所以只能靠这个组件把采样源接进来。
+ * (2026-09-26 用户要求"部分页面有单独的按钮, 也要液态玻璃")
+ */
+@Composable
+fun TopBarAction(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val backdrop = LocalTopBarBackdrop.current
+    if (backdrop != null) {
+        // LiquidButton 没有 enabled 参数(官方原样), 用 alpha + onClick 拦截来等效禁用态
+        LiquidButton(
+            onClick = { if (enabled) onClick() },
+            backdrop = backdrop,
+            modifier = modifier
+                .size(40.dp)
+                .alpha(if (enabled) 1f else 0.38f),
+            height = 40.dp,
+            contentPadding = 0.dp,
+            surfaceColor = glassSurfaceColor(),
+        ) {
+            content()
+        }
+    } else {
+        IconButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+            content()
+        }
+    }
+}
+
+/**
+ * 顶栏右侧的**文字**动作 —— 与 [TopBarAction] 同一块玻璃采样源, 但形状随内容伸缩。
+ *
+ * 为什么不复用 [TopBarAction]: 它是 40dp **正圆**(size 与 height 同值 + contentPadding = 0),
+ * "MIDI" / "JSON" / "复制指令" 这类文字塞进去会被裁掉。这里改成高度 36dp、左右内边距 14dp 的
+ * 胶囊, 宽度由内容决定, 视觉上仍是"顶栏上的一块玻璃"。
+ *
+ * 非玻璃时回落 Material3 [TextButton], 与原版逐字一致。
+ */
+@Composable
+fun TopBarTextAction(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val backdrop = LocalTopBarBackdrop.current
+    if (backdrop != null) {
+        LiquidButton(
+            onClick = { if (enabled) onClick() },
+            backdrop = backdrop,
+            modifier = modifier.alpha(if (enabled) 1f else 0.38f),
+            height = 36.dp,
+            contentPadding = 14.dp,
+            surfaceColor = glassSurfaceColor(),
+        ) {
+            // ★ 必须与回落分支的 TextButton 对齐, 否则一开玻璃文字就"变绿 + 大一号":
+            //   字色 = onSurfaceVariant(TextButtonTokens.LabelColor, 已反编译核实, 不是 Primary);
+            //   字号 = labelLarge(LiquidButton 是普通 Row, 不提供 LocalTextStyle,
+            //          不补就掉回 Material3 默认的 bodyLarge 16sp)。
+            CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+                LocalTextStyle provides MaterialTheme.typography.labelLarge,
+            ) { content() }
+        }
+    } else {
+        TextButton(onClick = onClick, modifier = modifier, enabled = enabled, content = content)
+    }
+}
+
+/**
  * 统一装饰顶栏: 顶部渐变底色 + 标题左侧图标 + 可选返回键。
  * 替代各界面裸的 CenterAlignedTopAppBar。
+ *
+ * [subtitle] 是可选的第二行小字 (2026-10-01 加)。只有 AI Agent 页在用 ——
+ * 那一页主标题要固定成模块名「AI Agent」, 对话名没地方放, 就压成副标题。
+ * 默认 null, 其余 41 个调用点外观一字不变。
+ *
+ * [navIcon] / [onNav] 是左侧槽位的第二种用法 (2026-10-01 加): 一级页面(底栏 Tab)没有
+ * 返回键, 但可能有侧边栏 —— 用它挂一个菜单键。同样是可选, 默认 null 时行为不变。
+ *
+ * [onSubtitleClick] 是副标题的**可点**能力 (2026-10-05 加): AI Agent 页把「会话模式」徽标
+ * 挤在副标题里, 点它就地重选模式。默认 null = 副标题只是一行说明文字, 与之前逐字节一致;
+ * 传了非 null 才在副标题外包一层 `clickable` 并加一个 ⌄ 提示可点。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(
     title: String,
+    subtitle: String? = null,
     icon: ImageVector? = null,
     onBack: (() -> Unit)? = null,
+    navIcon: ImageVector? = null,
+    onNav: (() -> Unit)? = null,
+    onSubtitleClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0f),
-                    )
+    // 液态玻璃顶栏 (2026-09-26)
+    // 这里是**全局共用**的顶栏 —— 41 个文件都用它, 所以改这一处就覆盖了全 App 的返回键。
+    // ★ 2026-09-26 修正: 判据原来写作 `liquidGlassActive && onBack != null`, 于是**没有返回键的
+    //   页面(AI Agent 等)整条顶栏都不建采样源** → 右侧 actions 槽里的 TopBarAction 拿不到
+    //   backdrop, 全部退化成 Material 圆形按钮(用户反馈"你要不看看顶部呢")。
+    //   返回键**是否渲染**才该看 onBack, 而**顶栏要不要玻璃**只看开关本身。
+    val glass = liquidGlassActive
+    // ★ 2026-09-26: 自定义背景图时**自动隐藏顶栏渐变与不透明底色**。
+    //   原版顶栏铺两层: 不透明 background(挡住壁纸) + primaryContainer 渐变(品牌绿)。
+    //   用户设了壁纸后, 这两层把图片顶部整块糊掉, 且品牌绿与壁纸色调打架
+    //   (用户反馈"顶部的颜色(渐变)…自定义壁纸时强制关闭, 让 ui 背景更好看")。
+    //   判据直接读背景图状态, 不额外加开关 —— 免得用户还要记得去关另一个键。
+    val hasCustomBg = AppState.backgroundImage.isNotBlank()
+    // 采样源: 顶栏自己的背景层, 做成一个**独立兄弟节点**。
+    // ⚠️ 玻璃按钮绝不能画在采样节点内部 —— layerBackdrop 录的是该节点全部绘制内容,
+    //    按钮若在里面就会采到上一帧的自己 → 静止怪像 + 拖影(底栏踩过同一个坑)。
+    val backdrop = rememberLayerBackdrop()
+    val gradient = Brush.verticalGradient(
+        listOf(
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0f),
+        )
+    )
+    Box(Modifier.fillMaxWidth()) {
+        // 背景层 = 采样源。多铺一层不透明底的理由: 采样纹理带 alpha 的话,
+        // 模糊/折射会把"透明"一起采进来, 玻璃会发灰。
+        // 全部页面用的都是 Scaffold 默认底色(= colorScheme.background), 所以这层不改变外观。
+        // ⚠️ 有壁纸时**必须整层隐身**(透明), 否则图片顶部被这两层盖住, 主题也就无从谈起。
+        Box(
+            Modifier
+                .matchParentSize()
+                .then(if (glass) Modifier.layerBackdrop(backdrop) else Modifier)
+                .then(
+                    if (hasCustomBg) Modifier
+                    else Modifier.background(MaterialTheme.colorScheme.background).background(gradient)
                 )
-            )
-    ) {
+        )
+        // 把采样源交给 actions 槽里的 TopBarAction —— 右侧按钮与左侧返回键共用同一个 backdrop,
+        // 视觉上才是"同一块玻璃上的两个球"。
+        CompositionLocalProvider(LocalTopBarBackdrop provides if (glass) backdrop else null) {
         CenterAlignedTopAppBar(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -214,18 +367,115 @@ fun AppTopBar(
                         Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(6.dp))
                     }
-                    Text(title, maxLines = 1)
+                    // 没有副标题时保持原来的单行 Text —— 不加 Column 就不会改变行高,
+                    // 其余 41 个页面(全是单标题)的顶栏高度与基线原样不动。
+                    if (subtitle.isNullOrBlank()) {
+                        Text(title, maxLines = 1)
+                    } else {
+                        Column {
+                            Text(title, maxLines = 1)
+                            // ★ 2026-10-05: onSubtitleClick != null 时副标题可点。
+                            //   加个 ⌄ 是因为"一行灰字能点"在视觉上毫无提示 —— 用户不会去试。
+                            //   Spacer 与省略号宽度都极短, 默认(null)分支一字未动。
+                            val subMod = Modifier
+                                .widthIn(max = 180.dp)
+                                .then(
+                                    if (onSubtitleClick != null)
+                                        Modifier.clickable(onClick = onSubtitleClick)
+                                    else Modifier
+                                )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = subMod) {
+                                Text(
+                                    subtitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (onSubtitleClick != null) {
+                                    Spacer(Modifier.width(2.dp))
+                                    Icon(
+                                        Icons.Default.ExpandMore,
+                                        "切换会话模式",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             },
             navigationIcon = {
-                if (onBack != null) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                // 左侧槽位两种用法, 共用同一套玻璃处理:
+                //   ① onBack —— 二级页面的返回键 (41 处调用点, 行为与外观一字不变)
+                //   ② onNav  —— 一级页面(底栏 Tab)的**菜单键**。
+                //      2026-10-01 用户反馈: "那个聊天记录应该改成一个在左边的三条横杠的侧边栏"。
+                //      原先它挤在右侧 actions 里当第 2 个圆钮 (Icons.Default.Forum —— 实心对话
+                //      气泡带个左下小尾巴), 夹在 + 和 ⚙ 两个描边图标中间看着就是歪的;
+                //      而且"开侧边栏"这个动作本来就该在左边。
+                val leadIcon = if (onBack != null) Icons.AutoMirrored.Filled.ArrowBack else navIcon
+                val leadClick = onBack ?: onNav
+                val leadDesc = if (onBack != null) "返回" else "菜单"
+                if (leadIcon != null && leadClick != null) {
+                    if (glass) {
+                        // 官方 LiquidButton 做正圆: size 与 height 同值 + contentPadding = 0。
+                        // 表面色用中性玻璃色(与指令库 FAB 一致), 不加 tint —— 返回/菜单键是"中性玻璃球",
+                        // 着主色会读起来像一个"动作按钮", 与发送键抢视觉。
+                        LiquidButton(
+                            onClick = leadClick,
+                            backdrop = backdrop,
+                            modifier = Modifier.size(40.dp),
+                            height = 40.dp,
+                            contentPadding = 0.dp,
+                            surfaceColor = glassSurfaceColor(),
+                        ) {
+                            Icon(
+                                leadIcon, leadDesc,
+                                // ★ 与回落分支的 IconButton 对齐: 顶栏 navigationIcon 槽的
+                                //   contentColor 是 colorScheme.onSurface(实测 0xFF16221C,
+                                //   而 onSurfaceVariant 是 0xFF4E6156 —— 别搞混)。
+                                //   原先这里写死纯黑/纯白(照搬官方 demo 的底栏做法), 一开玻璃
+                                //   返回箭头就从 onSurface 变成 #000000, 属于"颜色出现问题"的一项。
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = leadClick) { Icon(leadIcon, leadDesc) }
+                    }
                 }
             },
             actions = actions,
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
         )
+        }
     }
+}
+
+/**
+ * 全局背景图 (意见 id=22) —— 画在整个 App 的**最底层**, 所有页面共用同一张。
+ *
+ * 2026-09-26 用户要求"背景图改成全局"。原先它只画在主页自己的内容层里, 所以只有主页看得到。
+ * 现在提到 MainActivity 的 Theme 之内、AppNav 之外, 并配套把 `colorScheme.background` 置为
+ * 全透明(见 `CyanCodexTheme`) —— 否则各页 Scaffold 的默认容器色会把它整个盖住。
+ *
+ * 不做任何缓存以外的处理: 文件是设置页从相册拷进 filesDir 的 `custom_bg.jpg`, 用 Crop 铺满。
+ */
+@Composable
+fun GlobalBackgroundImage() {
+    val path = AppState.backgroundImage
+    if (path.isBlank()) return
+    // ⚠️ decodeFile 只看文件头、不看扩展名 —— 设置页是"原样拷贝源文件字节"到 custom_bg.jpg,
+    //    所以这里拿到的可能是 PNG 内容配 .jpg 名字, 这没问题(BitmapFactory 能识别)。
+    val bmp = remember(path) {
+        runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
+    } ?: return
+    Image(
+        bmp.asImageBitmap(), null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+    )
 }
 
 /** 版本号比较: 公告版本 > 当前安装版本(BuildConfig.VERSION_NAME) */
@@ -260,6 +510,7 @@ fun AnnBadge(type: String) {
     val (label, color) = when (type) {
         "update" -> "更新" to Color(0xFF4ADE80)
         "punish" -> "处罚" to Color(0xFFF87171)
+        "activity" -> "活动" to Color(0xFFFBBF24)
         else -> "公告" to Color(0xFF38BDF8)
     }
     Surface(shape = MaterialTheme.shapes.small, color = color.copy(alpha = 0.18f)) {
@@ -314,7 +565,10 @@ fun errText(e: Exception?): String {
 suspend fun <T> safeApi(block: suspend () -> ApiResp<T>): ApiResp<T> =
     try { block() }
     catch (e: kotlinx.coroutines.CancellationException) { throw e }
-    catch (e: Exception) { ApiResp(ok = false, error = errText(e)) }
+    catch (e: Exception) {
+        com.canglan.cyancodex.data.DebugStore.logE("Api", "调用异常: ${e.javaClass.simpleName}: ${e.message}")
+        ApiResp(ok = false, error = errText(e))
+    }
 
 /**
  * 解析指令 TXT 文件:
@@ -419,6 +673,69 @@ private fun PropBadge(text: String, color: Color) {
     Surface(shape = MaterialTheme.shapes.small, color = color.copy(alpha = 0.18f)) {
         Text(text, color = color, style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/**
+ * 点赞心形：点赞时弹性 pop（0.55 → 1，spring 过冲）+ 2px 玫瑰色圆环扩散淡出；
+ * 取消时 150ms 回落，无圆环。指令详情页两处点赞共用。
+ */
+@Composable
+fun AnimatedLikeIcon(
+    liked: Boolean,
+    modifier: Modifier = Modifier,
+    size: Dp = 16.dp,
+) {
+    val scale = remember { Animatable(1f) }
+    val ring = remember { Animatable(1f) }   // 1 = 已结束/隐藏
+    val density = LocalDensity.current
+    val basePx = with(density) { size.toPx() }
+
+    LaunchedEffect(liked) {
+        if (liked) {
+            scale.snapTo(0.55f)
+            ring.snapTo(0f)
+            launch {
+                scale.animateTo(
+                    1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.45f,
+                        stiffness = Spring.StiffnessMedium,
+                    ),
+                )
+            }
+            ring.animateTo(1f, animationSpec = tween(550, easing = LinearEasing))
+        } else {
+            scale.animateTo(1f, animationSpec = tween(150))
+            ring.snapTo(1f)
+        }
+    }
+
+    Box(
+        modifier = modifier.size(size * 1.9f),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (ring.value < 1f) {
+            Canvas(Modifier.fillMaxSize()) {
+                val p = ring.value
+                drawCircle(
+                    color = Color(0xFFF43F5E).copy(alpha = (1f - p) * 0.55f),
+                    radius = basePx * 0.5f * (1f + 0.9f * p),
+                    style = Stroke(width = 2.dp.toPx()),
+                )
+            }
+        }
+        Icon(
+            imageVector = if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+            contentDescription = if (liked) "已赞" else "点赞",
+            tint = if (liked) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(size)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                },
+        )
     }
 }
 
@@ -538,6 +855,14 @@ fun CommandCard(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
                         }
                     }
+                    // 官方认证徽章 (红色)
+                    if (cmd.authorOfficial != 0) {
+                        Spacer(Modifier.width(4.dp))
+                        Surface(shape = MaterialTheme.shapes.small, color = Color(0xFFF87171).copy(alpha = 0.18f)) {
+                            Text("官方", color = Color(0xFFF87171), style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                        }
+                    }
                 } else {
                     Text(
                         authorText,
@@ -571,6 +896,17 @@ fun CommandCard(
                         Spacer(Modifier.width(3.dp))
                         Text("${cmd.commentCount}", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                // 附件角标 (可以只发附件)
+                if (cmd.fileCount > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AttachFile, null, tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("${cmd.fileCount}", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 // 一键复制指令 (参考 CHelper/BNM: 复制原始命令文本)

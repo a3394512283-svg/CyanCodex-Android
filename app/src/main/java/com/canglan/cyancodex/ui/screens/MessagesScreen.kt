@@ -49,9 +49,14 @@ fun MessagesScreen(nav: NavHostController) {
         }
     }
 
-    Scaffold(topBar = {
-        AppTopBar(title = "站内信", icon = Icons.Default.MailOutline, onBack = { nav.popBackStack() })
-    }) { pad ->
+    Scaffold(
+        // 用户反馈「站内信有大黑边」：原来沿用主题 background（深色下近黑），
+        // 换成与卡片/底栏一致的 surface，整页观感统一
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            AppTopBar(title = "站内信", icon = Icons.Default.MailOutline, onBack = { nav.popBackStack() })
+        },
+    ) { pad ->
         if (loading && list.isEmpty()) { LoadingBox(Modifier.padding(pad)); return@Scaffold }
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {

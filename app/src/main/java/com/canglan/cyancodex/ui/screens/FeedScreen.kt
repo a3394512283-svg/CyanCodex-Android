@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.data.FeedItem
+import com.canglan.cyancodex.ui.LocalGlassBottomInset
 import com.canglan.cyancodex.ui.Routes
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.AvatarIcon
@@ -58,7 +59,11 @@ fun FeedScreen(nav: NavHostController) {
                 Modifier.padding(pad))
             else -> LazyColumn(
                 Modifier.padding(pad).fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
+                contentPadding = PaddingValues(
+                    start = 12.dp, top = 12.dp, end = 12.dp,
+                    // 液态玻璃开启时底栏浮在内容之上, 末尾补出这段高度
+                    bottom = 12.dp + LocalGlassBottomInset.current,
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(items) { it ->

@@ -31,6 +31,9 @@ import com.canglan.cyancodex.data.ApiClient
 import com.canglan.cyancodex.ui.AppState
 import com.canglan.cyancodex.ui.components.AppTopBar
 import com.canglan.cyancodex.ui.components.AvatarIcon
+import com.canglan.cyancodex.ui.components.GlassActionButton
+import com.canglan.cyancodex.ui.components.GlassFilterChip
+import com.canglan.cyancodex.ui.components.TopBarTextAction
 import com.canglan.cyancodex.ui.components.avatarMap
 import com.canglan.cyancodex.ui.components.safeApi
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +121,7 @@ fun ProfileEditScreen(nav: NavHostController) {
     Scaffold(
         topBar = {
             AppTopBar(title = "个人中心", icon = Icons.Default.Person, onBack = { nav.popBackStack() }, actions = {
-                TextButton(onClick = { save() }, enabled = !saving) {
+                TopBarTextAction(onClick = { save() }, enabled = !saving) {
                     Icon(Icons.Default.Save, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("保存")
                 }
             })
@@ -130,7 +133,7 @@ fun ProfileEditScreen(nav: NavHostController) {
                 AvatarIcon(avatar, 76.dp)
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedButton(
+            GlassActionButton(
                 onClick = { launcher.launch("image/*") },
                 enabled = !uploading,
                 modifier = Modifier.fillMaxWidth(),
@@ -170,7 +173,7 @@ fun ProfileEditScreen(nav: NavHostController) {
             Text("性别", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("male" to "男", "female" to "女", "secret" to "保密").forEach { (k, v) ->
-                    FilterChip(selected = gender == k, onClick = { gender = k }, label = {
+                    GlassFilterChip(selected = gender == k, onClick = { gender = k }, label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (k == "male") { Icon(Icons.Default.Male, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)) }
                             if (k == "female") { Icon(Icons.Default.Female, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)) }
@@ -186,7 +189,7 @@ fun ProfileEditScreen(nav: NavHostController) {
             }
 
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { save() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+            GlassActionButton(filled = true, onClick = { save() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
                 Text(if (saving) "保存中…" else "保存修改", fontWeight = FontWeight.Bold)
             }
         }
