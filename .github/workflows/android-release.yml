@@ -1,0 +1,156 @@
+# ============================================================================
+#  安卓版自动构建 + 发布
+#
+#  触发：push tag v*（如 v2.0.2.01）或手动 workflow_dispatch
+#
+#  流程：构建 release APK → 上传到服务器 /dl/ → 改 ai.db 配置 → 验证
+#
+#  ★★ 为什么配置要用脚本改而不是手改：
+#     发布需要同时改 5 个键（app_latest_name / app_latest_code / app_apk_url /
+#     app_apk_size / app_apk_md5）。手工改最容易漏 app_latest_code —— 漏了以后
+#     主页显示新版本，但 App 点「检查更新」永远提示已是最新，用户永远升不上来。
+#     这个坑实际踩过一次，所以固化成脚本。
+#
+#  需要在仓库 Settings → Secrets 里配：
+#     SSH_HOST      服务器地址
+#     SSH_PORT      SSH 端口
+#     SSH_USER      用户名（root）
+#     SSH_KEY       私钥全文（含 BEGIN/END 行）
+#     KEYSTORE_B64  release keystore 的 base64（cat xxx.keystore | base64 -w0）
+#     KEYSTORE_PASS keystore 密码
+#     KEY_ALIAS     签名别名
+#     KEY_PASS      签名密码
+# ============================================================================
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（如 2.0.2.01）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building $V"
+
+      - name: Restore keystore
+        working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > ci.keystore
+          cat > keystore.properties <<EOF
+          storeFile=../ci.keystore
+          storePassword=$KEYSTORE_PASS
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASS
+          EOF
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "md5=$(md5sum "$APK" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c%s "$APK")" >> "$GITHUB_OUTPUT"
+          # versionCode 从 gradle 里读 —— 漏传这个会导致 App 永远提示「已是最新」
+          echo "code=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' android/app/build.gradle.kts | head -1)" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK"
+
+      - name: Upload to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          TARGET="/www/wwwroot/cyancodex.bluestudio.cn/dl/CyanCodex-${{ steps.ver.outputs.version }}.apk"
+          scp -i ~/.ssh/id_ci -P "$SSH_PORT" "${{ steps.apk.outputs.path }}" "$SSH_USER@$SSH_HOST:$TARGET"
+          echo "uploaded -> $TARGET"
+
+      - name: Update config and restart
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          cat > /tmp/setver.py <<'PYEOF'
+          import sys, ai_common as C
+          ver, code, url, size, md5 = sys.argv[1:6]
+          cfg = C.load_config(force=True)
+          cfg["app_latest_name"] = ver
+          cfg["app_latest_code"] = int(code)
+          cfg["app_apk_url"]      = url
+          cfg["app_apk_size"]     = int(size)
+          cfg["app_apk_md5"]      = md5
+          cfg["app_notes"]        = "自动发布 " + ver
+          C.save_config(cfg)
+          c2 = C.load_config(force=True)
+          assert c2["app_latest_name"] == ver and c2["app_latest_code"] == int(code), "配置写入校验失败"
+          print("config ok:", ver, code)
+          PYEOF
+          scp -i ~/.ssh/id_ci -P "$SSH_PORT" /tmp/setver.py "$SSH_USER@$SSH_HOST:/tmp/setver.py"
+          ssh -i ~/.ssh/id_ci -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd /www/wwwroot/cyancodex.bluestudio.cn/ai && PYTHONPATH=. python3 /tmp/setver.py \
+             '${{ steps.ver.outputs.version }}' '${{ steps.apk.outputs.code }}' \
+             '/dl/CyanCodex-${{ steps.ver.outputs.version }}.apk' \
+             '${{ steps.apk.outputs.size }}' '${{ steps.apk.outputs.md5 }}' && \
+             systemctl restart cyancodex-ai && sleep 3 && systemctl is-active cyancodex-ai"
+
+      - name: Verify endpoint
+        run: |
+          sleep 3
+          BODY=$(curl -s --max-time 20 "https://cyancodex.bluestudio.cn/api/v1/app/version")
+          echo "$BODY"
+          echo "$BODY" | grep -q "\"latest\":\"${{ steps.ver.outputs.version }}\"" \
+            || { echo "::error::版本接口未更新"; exit 1; }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          name: v${{ steps.ver.outputs.version }}
+          generate_release_notes: true
