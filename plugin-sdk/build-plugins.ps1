@@ -1,29 +1,18 @@
 # 构建两个默认插件 JAR: javac 编译(对 API 桩) -> d8 转 dex -> jar 打包 -> 放入 App assets
-#
-# 路径解析(不再硬编码机器路径):
-#   ANDROID_HOME / ANDROID_SDK_ROOT -> Android SDK (默认 $env:LOCALAPPDATA\Android\Sdk)
-#   JAVA_HOME                       -> JDK, 需含 bin\javac.exe 与 bin\jar.exe
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-$root = $PSScriptRoot
+$root = 'E:\CyanCodex\.plugin-src'
 $out = "$root\build"
 $stubOut = "$out\stub"
 $classesOut = "$out\classes"
+$javac = 'E:\android studio\jbr\bin\javac.exe'
+$jarExe = 'E:\android studio\jbr\bin\jar.exe'
+$androidJar = 'C:\Users\SYC01\AppData\Local\Android\Sdk\platforms\android-36\android.jar'
+$d8 = 'C:\Users\SYC01\AppData\Local\Android\Sdk\build-tools\36.1.0\d8.bat'
+$assets = 'E:\CyanCodex\android\app\src\main\assets\plugins'
 
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME }
-       elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
-       else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
-$jdkBin = if ($env:JAVA_HOME) { "$env:JAVA_HOME\bin" } else { '' }
-
-$javac = "$jdkBin\javac.exe"
-$jarExe = "$jdkBin\jar.exe"
-$androidJar = "$sdk\platforms\android-36\android.jar"
-$d8 = "$sdk\build-tools\36.1.0\d8.bat"
-$assets = "$root\..\android\app\src\main\assets\plugins"
-
-if (-not $jdkBin) { Write-Output "ERROR JAVA_HOME 未设置 (需要含 javac/jar 的 JDK)"; exit 1 }
-if (-not (Test-Path $androidJar)) { Write-Output "ERROR android.jar missing: $androidJar"; exit 1 }
+if (-not (Test-Path $androidJar)) { Write-Output "ERROR android.jar missing"; exit 1 }
 
 New-Item -ItemType Directory -Force -Path $stubOut | Out-Null
 New-Item -ItemType Directory -Force -Path $classesOut | Out-Null

@@ -21,13 +21,14 @@ android {
         applicationId = "com.canglan.cyancodex.com"
         minSdk = 26
         targetSdk = 36
-        // 版本规则 (2026-10-17 用户改):
-        //   versionName 末位 +0.01 —— 2.0.0 -> 2.0.01 -> 2.0.02 ...
-        //   (原规则是 +0.0.1, 步长太小, 用户要求改大)
-        //   versionCode 每次发版 +1, **不再**用 major*10000+minor*100+patch 推导 ——
-        //   那个公式在末位涨到 100 时会和 minor+1 撞车 (2.0.100 与 2.1.0 都算 20100)。
-        versionCode = 20010
-        versionName = "2.0.10"
+        // 版本规则 (2026-10-18 用户改):
+        //   versionName 跟随上游 major.minor.patch, 二改版再加一段 .NN
+        //     —— 上游 2.0.2 → 二改 2.0.2.01 → 2.0.2.02 ...
+        //     好处: 一眼看出基于哪个上游版本。
+        //   versionCode 每次发版 +1 (从上游 20002 之后继续), 不用公式推导 ——
+        //   公式在末位涨到 100 时会和 minor+1 撞车。
+        versionCode = 20011
+        versionName = "2.0.2.01"
     }
 
     signingConfigs {

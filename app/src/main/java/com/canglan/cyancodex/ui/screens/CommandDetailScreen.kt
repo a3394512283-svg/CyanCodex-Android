@@ -103,8 +103,19 @@ fun CommandDetailScreen(nav: NavHostController, id: Long) {
     }
 
     LaunchedEffect(id) {
-        val r = safeApi { ApiClient.get().commandDetail(id) }
-        if (r.ok) { cmd = r.data; loadError = "" } else loadError = r.error ?: "加载失败"
+        // 用户反馈（意见 #91）：看自己未发布的指令时一直转圈进不去。
+        // 原因：接口返回 ok=true 但 data=null（未上架的指令对非作者就是这样），
+        // 旧代码只判断 r.ok 就把 loadError 清空，cmd 仍是 null → 界面永远停在 LoadingBox。
+        // 现在必须同时拿到 data 才算成功，否则给出可读的失败原因，保证不会无限转圈。
+        val r = runCatching { safeApi { ApiClient.get().commandDetail(id) } }.getOrNull()
+        val data = r?.data
+        if (r != null && r.ok && data != null) {
+            cmd = data
+            loadError = ""
+        } else {
+            loadError = r?.error?.takeIf { it.isNotBlank() }
+                ?: "没能读取到这条指令的内容（可能还没审核通过，或已被删除）"
+        }
         loadComments()
     }
 

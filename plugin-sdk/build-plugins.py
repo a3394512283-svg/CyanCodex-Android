@@ -2,10 +2,6 @@
 """构建内置插件 JAR (javac -> d8 -> zip)
 用法: python build-plugins.py
 
-路径解析(不再硬编码机器路径):
-  ANDROID_HOME / ANDROID_SDK_ROOT -> Android SDK (默认 ~/AppData/Local/Android/Sdk)
-  JAVA_HOME                       -> JDK, 需含 bin/javac 与 bin/jar
-
 产物:
   android/app/src/main/assets/plugins/background.jar   自定义背景插件
   android/app/src/main/assets/plugins/dev.jar          开发者示例插件
@@ -17,21 +13,14 @@ import subprocess
 import sys
 import zipfile
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get('CYANCODEX_PLUGIN_SRC', _HERE)
+ROOT = r'E:\CyanCodex\.plugin-src'
 OUT = os.path.join(ROOT, 'build')
 STUB_OUT = os.path.join(OUT, 'stub')
 CLASSES_OUT = os.path.join(OUT, 'classes')
-
-_SDK = (os.environ.get('ANDROID_HOME')
-        or os.environ.get('ANDROID_SDK_ROOT')
-        or os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Android', 'Sdk'))
-_JAVA_BIN = os.path.join(os.environ['JAVA_HOME'], 'bin') if os.environ.get('JAVA_HOME') else ''
-
-JAVAC = os.path.join(_JAVA_BIN, 'javac.exe') if _JAVA_BIN else 'javac'
-ANDROID_JAR = os.path.join(_SDK, 'platforms', 'android-36', 'android.jar')
-D8 = os.path.join(_SDK, 'build-tools', '36.1.0', 'd8.bat')
-ASSETS = os.path.join(_HERE, '..', 'android', 'app', 'src', 'main', 'assets')
+JAVAC = r'E:\android studio\jbr\bin\javac.exe'
+ANDROID_JAR = r'C:\Users\SYC01\AppData\Local\Android\Sdk\platforms\android-36\android.jar'
+D8 = r'C:\Users\SYC01\AppData\Local\Android\Sdk\build-tools\36.1.0\d8.bat'
+ASSETS = r'E:\CyanCodex\android\app\src\main\assets'
 SERVICE = 'META-INF/services/com.canglan.cyancodex.plugin.CyanPlugin'
 MANIFEST = 'Manifest-Version: 1.0\r\nCreated-By: CyanCodex plugin builder\r\n\r\n'
 
